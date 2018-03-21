@@ -1,3 +1,3 @@
-Dreamer
+Spectacle
 ===
-Personal Telnet BBS-like portal.
+Mini CI.
