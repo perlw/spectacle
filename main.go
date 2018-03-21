@@ -178,17 +178,22 @@ func (h HookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		tmpDir := fmt.Sprintf("/tmp/spectacle-%s", repo.Name)
 		gitUrl := fmt.Sprintf("https://github.com/%s", repo.Name)
 		os.Remove(tmpDir)
-		gitRepo, err := git.Clone(gitUrl, tmpDir, nil)
+
+		cloneOpts := git.CloneOptions{
+			Strategy:       git.CheckoutSafe | git.CheckoutRecreateMissing | git.CheckoutAllowConflicts | git.CheckoutUseTheirs,
+			CheckoutBranch: repo.Branch,
+		}
+		gitRepo, err := git.Clone(gitUrl, tmpDir, &cloneOpts)
 		if err != nil {
 			logMsg += fmt.Sprintf("├could not clone, %s\n", err.Error())
 			http.Error(w, "500 internal server error", http.StatusInternalServerError)
 			return
 		}
-		if err := checkoutBranch(gitRepo, repo.Branch); err != nil {
+		/*if err := checkoutBranch(gitRepo, repo.Branch); err != nil {
 			logMsg += fmt.Sprintf("├could not get branch, %s\n", err.Error())
 			http.Error(w, "500 internal server error", http.StatusInternalServerError)
 			return
-		}
+		}*/
 	default:
 		logMsg += "├unhandled\n"
 	}
