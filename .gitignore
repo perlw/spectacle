@@ -1,0 +1,6 @@
+*.exe
+*.swp
+*.swo
+tags
+bin/
+data/
