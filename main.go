@@ -180,7 +180,6 @@ func (h HookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		os.Remove(tmpDir)
 
 		cloneOpts := git.CloneOptions{
-			Strategy:       git.CheckoutSafe | git.CheckoutRecreateMissing | git.CheckoutAllowConflicts | git.CheckoutUseTheirs,
 			CheckoutBranch: repo.Branch,
 		}
 		gitRepo, err := git.Clone(gitUrl, tmpDir, &cloneOpts)
