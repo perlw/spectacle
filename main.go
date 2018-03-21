@@ -178,7 +178,8 @@ func (h HookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		tmpDir := fmt.Sprintf("/tmp/spectacle-%s", repo.Name)
 		gitUrl := fmt.Sprintf("https://github.com/%s", repo.Name)
 		os.Remove(tmpDir)
-		if gitRepo, err := git.Clone(gitUrl, tmpDir, nil); err != nil {
+		gitRepo, err := git.Clone(gitUrl, tmpDir, nil)
+		if err != nil {
 			logMsg += fmt.Sprintf("├could not clone, %s\n", err.Error())
 			http.Error(w, "500 internal server error", http.StatusInternalServerError)
 			return
