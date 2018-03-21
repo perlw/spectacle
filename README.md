@@ -1,3 +1,3 @@
 Spectacle
 ===
-Mini CI.
+nano CI, and stuff.

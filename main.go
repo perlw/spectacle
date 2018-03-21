@@ -5,25 +5,31 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
-	//"encoding/json"
 
 	"github.com/go-ini/ini"
 	"github.com/pkg/errors"
+	"gopkg.in/libgit2/git2go.v26"
 )
 
 type Repo struct {
 	Name   string
 	Secret string `ini:"secret"`
+	Branch string `ini:"branch"`
 }
 
 type GithubPayload struct {
+	Ref        string `json:"ref"`
+	After      string `json:"after"`
 	Repository struct {
-		Name string `json:"name"`
+		Name     string `json:"name"`
+		FullName string `json:"full_name"`
 	} `json:"repository"`
 }
 
@@ -88,9 +94,33 @@ func (h HookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	// Handle event
 	event := r.Header.Get("X-GitHub-Event")
-	log.Printf("┌incoming hook: %s|%s\n", repo.Name, event)
+	logMsg := fmt.Sprintf("┌incoming hook: %s|%s\n", repo.Name, event)
+	switch event {
+	case "watch":
+		logMsg += "├to be implemented\n"
+	case "push":
+		if !strings.HasSuffix(payload.Ref, repo.Branch) {
+			logMsg += fmt.Sprintf("├ignored ref \"%s\"\n", payload.Ref)
+			break
+		}
+
+		// TODO: Queue and run on goroutine
+		tmpDir := fmt.Sprintf("/tmp/spectacle-%s", ref.After)
+		commit := fmt.Sprintf("https://github.com/%s/commit/%s", repo.Name, ref.After)
+		os.Remove(tmpDir)
+		if err := git.Clone(commit, tmpDir, nil); err != nil {
+			logMsg += fmt.Sprintf("├could not clone, %s\n", err.Error())
+			http.Error(w, "500 internal server error", http.StatusInternalServerError)
+			return
+		}
+	default:
+		logMsg += "├unhandled\n"
+	}
+	log.Printf(logMsg)
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func main() {
