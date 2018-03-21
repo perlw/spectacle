@@ -139,7 +139,7 @@ func (h HookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Find config
 	repo, ok := (func() (*Repo, bool) {
 		for _, repo := range h.Repos {
-			if repo.Name == payload.Repository.Name {
+			if repo.Name == payload.Repository.FullName {
 				return &repo, true
 			}
 		}
@@ -237,7 +237,7 @@ func main() {
 		MaxHeaderBytes: 1 << 20,
 	}
 
-	log.Println("Going up...")
+	log.Println("going up...")
 	err = server.ListenAndServe()
 	if err != nil {
 		log.Fatal("could not start server,", err)
