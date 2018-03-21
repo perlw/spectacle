@@ -26,11 +26,79 @@ type Repo struct {
 
 type GithubPayload struct {
 	Ref        string `json:"ref"`
-	After      string `json:"after"`
 	Repository struct {
 		Name     string `json:"name"`
 		FullName string `json:"full_name"`
 	} `json:"repository"`
+}
+
+func checkoutBranch(repo *git.Repository, branchName string) error {
+	checkoutOpts := &git.CheckoutOpts{
+		Strategy: git.CheckoutSafe | git.CheckoutRecreateMissing | git.CheckoutAllowConflicts | git.CheckoutUseTheirs,
+	}
+	//Getting the reference for the remote branch
+	// remoteBranch, err := repo.References.Lookup("refs/remotes/origin/" + branchName)
+	remoteBranch, err := repo.LookupBranch("origin/"+branchName, git.BranchRemote)
+	if err != nil {
+		log.Print("Failed to find remote branch: " + branchName)
+		return err
+	}
+	defer remoteBranch.Free()
+
+	// Lookup for commit from remote branch
+	commit, err := repo.LookupCommit(remoteBranch.Target())
+	if err != nil {
+		log.Print("Failed to find remote branch commit: " + branchName)
+		return err
+	}
+	defer commit.Free()
+
+	localBranch, err := repo.LookupBranch(branchName, git.BranchLocal)
+	// No local branch, lets create one
+	if localBranch == nil || err != nil {
+		// Creating local branch
+		localBranch, err = repo.CreateBranch(branchName, commit, false)
+		if err != nil {
+			log.Print("Failed to create local branch: " + branchName)
+			return err
+		}
+
+		// Setting upstream to origin branch
+		err = localBranch.SetUpstream("origin/" + branchName)
+		if err != nil {
+			log.Print("Failed to create upstream to origin/" + branchName)
+			return err
+		}
+	}
+	if localBranch == nil {
+		return errors.New("Error while locating/creating local branch")
+	}
+	defer localBranch.Free()
+
+	// Getting the tree for the branch
+	localCommit, err := repo.LookupCommit(localBranch.Target())
+	if err != nil {
+		log.Print("Failed to lookup for commit in local branch " + branchName)
+		return err
+	}
+	defer localCommit.Free()
+
+	tree, err := repo.LookupTree(localCommit.TreeId())
+	if err != nil {
+		log.Print("Failed to lookup for tree " + branchName)
+		return err
+	}
+	defer tree.Free()
+
+	// Checkout the tree
+	err = repo.CheckoutTree(tree, checkoutOpts)
+	if err != nil {
+		log.Print("Failed to checkout tree " + branchName)
+		return err
+	}
+	// Setting the Head to point to our branch
+	repo.SetHead("refs/heads/" + branchName)
+	return nil
 }
 
 type HookHandler struct {
@@ -107,11 +175,16 @@ func (h HookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// TODO: Queue and run on goroutine
-		tmpDir := fmt.Sprintf("/tmp/spectacle-%s", ref.After)
-		commit := fmt.Sprintf("https://github.com/%s/commit/%s", repo.Name, ref.After)
+		tmpDir := fmt.Sprintf("/tmp/spectacle-%s", repo.Name)
+		gitUrl := fmt.Sprintf("https://github.com/%s", repo.Name)
 		os.Remove(tmpDir)
-		if err := git.Clone(commit, tmpDir, nil); err != nil {
+		if gitRepo, err := git.Clone(gitUrl, tmpDir, nil); err != nil {
 			logMsg += fmt.Sprintf("├could not clone, %s\n", err.Error())
+			http.Error(w, "500 internal server error", http.StatusInternalServerError)
+			return
+		}
+		if err := checkoutBranch(gitRepo, repo.Branch); err != nil {
+			logMsg += fmt.Sprintf("├could not get branch, %s\n", err.Error())
 			http.Error(w, "500 internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -163,6 +236,7 @@ func main() {
 		MaxHeaderBytes: 1 << 20,
 	}
 
+	log.Println("Going up...")
 	err = server.ListenAndServe()
 	if err != nil {
 		log.Fatal("could not start server,", err)
