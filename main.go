@@ -10,12 +10,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/go-ini/ini"
 	"github.com/pkg/errors"
-	"gopkg.in/libgit2/git2go.v26"
 )
 
 type Repo struct {
@@ -106,24 +106,24 @@ func (h HookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// TODO: Queue and run on goroutine
-		(func() {
-			tmpDir := fmt.Sprintf("/tmp/spectacle-%s", strings.Replace(repo.Name, "/", "-", -1))
-			gitUrl := fmt.Sprintf("https://github.com/%s", repo.Name)
-			if _, err := os.Stat(tmpDir); os.IsExist(err) {
-				os.Remove(tmpDir)
-			}
+		tmpDir := fmt.Sprintf("/tmp/spectacle-%s", strings.Replace(repo.Name, "/", "-", -1))
+		gitUrl := fmt.Sprintf("https://github.com/%s", repo.Name)
+		buildPath := tmpDir + "/src/github.com/" + repo.Name
+		if _, err := os.Stat(tmpDir); os.IsExist(err) {
+			os.Remove(tmpDir)
+		}
 
-			// Clone git repo
-			cloneOpts := git.CloneOptions{
-				CheckoutBranch: repo.Branch,
-			}
-			_, err := git.Clone(gitUrl, tmpDir, &cloneOpts)
-			if err != nil {
-				logMsg += fmt.Sprintf("├could not clone, %s\n", err.Error())
-				http.Error(w, "500 internal server error", http.StatusInternalServerError)
-				return
-			}
-		})()
+		os.Mkdir(tmpDir, os.ModePerm)
+		os.MkdirAll(buildPath, os.ModePerm)
+		gitCmd := exec.Command("git", "clone", gitUrl, buildPath)
+		gitCmd.Env = append(os.Environ(),
+			"GOPATH="+tmpDir,
+		)
+		if err := gitCmd.Run(); err != nil {
+			logMsg += fmt.Sprintf("├failed to prepare for build, %s", err.Error())
+			http.Error(w, "403 forbidden", http.StatusForbidden)
+			return
+		}
 	default:
 		logMsg += "├unhandled\n"
 	}
