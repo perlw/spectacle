@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/go-ini/ini"
@@ -64,11 +65,22 @@ func jobRunner() {
 					return errors.Wrap(err, "remove failed")
 				}
 			}
-			os.Mkdir(tmpDir, os.ModePerm)
 			os.MkdirAll(buildPath, os.ModePerm)
+			filepath.Walk(tmpDir, func(path string, info os.FileInfo, err error) error {
+				if err == nil {
+					err = os.Chown(path, 1001, 1001)
+				}
+				return err
+			})
 
 			// Fetch code
 			gitCmd := exec.Command("git", "clone", job.Url, buildPath)
+			gitCmd.SysProcAttr = &syscall.SysProcAttr{
+				Credential: &syscall.Credential{
+					Uid: 1001,
+					Gid: 1001,
+				},
+			}
 			if err := gitCmd.Run(); err != nil {
 				log.Printf("├failed to prepare for build, %s", err.Error())
 				return errors.Wrap(err, "git command failed")
@@ -80,8 +92,15 @@ func jobRunner() {
 				return errors.Wrap(err, "missing spectacle.sh")
 			}
 			buildCmd := exec.Command("sh", "spectacle.sh")
+			buildCmd.SysProcAttr = &syscall.SysProcAttr{
+				Credential: &syscall.Credential{
+					Uid: 1001,
+					Gid: 1001,
+				},
+			}
 			buildCmd.Dir = buildPath
 			buildCmd.Env = []string{
+				"HOME=/home/spectacle",
 				"GOPATH=" + tmpDir,
 				"PATH=/usr/local/sbin:/usr/local/bin:/usr/bin",
 			}
@@ -97,7 +116,7 @@ func jobRunner() {
 		if err != nil {
 			status = "FAIL"
 		}
-		log.Printf("└[%s] in %.2fms\n", status, float64(time.Since(start))/float64(time.Millisecond))
+		log.Printf("└[%s] in %.2fs\n", status, float64(time.Since(start))/float64(time.Second))
 	}
 }
 
