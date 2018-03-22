@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -32,6 +31,59 @@ type GithubPayload struct {
 	} `json:"repository"`
 }
 
+type BuildJob struct {
+	Name   string
+	Url    string
+	Branch string
+}
+
+var worker chan BuildJob
+
+func queueWork(job BuildJob) {
+	go (func() {
+		worker <- job
+	})()
+}
+
+func jobRunner() {
+	worker = make(chan BuildJob)
+
+	for {
+		job := <-worker
+
+		log.Printf("┌running build job on %s|%s\n", job.Name, job.Branch)
+
+		err := (func() error {
+			// Set up working directory and prepare
+			tmpDir := "/tmp/spectacle-" + strings.Replace(job.Name, "/", "-", -1)
+			buildPath := tmpDir + "/src/github.com/" + job.Name
+			if _, err := os.Stat(tmpDir); os.IsExist(err) {
+				os.Remove(tmpDir)
+			}
+			os.Mkdir(tmpDir, os.ModePerm)
+			os.MkdirAll(buildPath, os.ModePerm)
+
+			// Fetch code
+			gitCmd := exec.Command("git", "clone", job.Url, buildPath)
+			/*gitCmd.Env = append(os.Environ(),
+				"GOPATH="+tmpDir,
+			)*/
+			if err := gitCmd.Run(); err != nil {
+				log.Printf("├failed to prepare for build, %s", err.Error())
+				return errors.Wrap(err, "git command failed")
+			}
+
+			return nil
+		})()
+
+		status := "OK"
+		if err != nil {
+			status = "FAIL"
+		}
+		log.Printf("└[%s]\n", status)
+	}
+}
+
 type HookHandler struct {
 	Repos []Repo
 }
@@ -40,8 +92,9 @@ func (h HookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Server", "spectacle")
 
 	start := time.Now()
+	log.Printf("┌%s", r.URL.Path)
 	defer func() {
-		log.Printf("└%s in %.2fms", r.URL.Path, float64(time.Since(start))/float64(time.Millisecond))
+		log.Printf("└done in %.2fms", float64(time.Since(start))/float64(time.Millisecond))
 	}()
 
 	if r.URL.Path != "/hook" {
@@ -95,41 +148,27 @@ func (h HookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Handle event
 	event := r.Header.Get("X-GitHub-Event")
-	logMsg := fmt.Sprintf("┌incoming hook: %s|%s\n", repo.Name, event)
+	log.Printf("├incoming hook: %s|%s\n", repo.Name, event)
 	switch event {
 	case "watch":
-		logMsg += "├to be implemented\n"
+		log.Println("├to be implemented\n")
 	case "push":
 		if !strings.HasSuffix(payload.Ref, repo.Branch) {
-			logMsg += fmt.Sprintf("├ignored ref \"%s\"\n", payload.Ref)
+			log.Printf("├ignored ref \"%s\"\n", payload.Ref)
 			break
 		}
 
-		// TODO: Queue and run on goroutine
-		tmpDir := fmt.Sprintf("/tmp/spectacle-%s", strings.Replace(repo.Name, "/", "-", -1))
-		gitUrl := fmt.Sprintf("https://github.com/%s", repo.Name)
-		buildPath := tmpDir + "/src/github.com/" + repo.Name
-		if _, err := os.Stat(tmpDir); os.IsExist(err) {
-			os.Remove(tmpDir)
-		}
-
-		os.Mkdir(tmpDir, os.ModePerm)
-		os.MkdirAll(buildPath, os.ModePerm)
-		gitCmd := exec.Command("git", "clone", gitUrl, buildPath)
-		gitCmd.Env = append(os.Environ(),
-			"GOPATH="+tmpDir,
-		)
-		if err := gitCmd.Run(); err != nil {
-			logMsg += fmt.Sprintf("├failed to prepare for build, %s", err.Error())
-			http.Error(w, "403 forbidden", http.StatusForbidden)
-			return
-		}
+		log.Println("├queued build")
+		queueWork(BuildJob{
+			Name:   repo.Name,
+			Url:    "https://github.com/" + repo.Name,
+			Branch: repo.Branch,
+		})
 	default:
-		logMsg += "├unhandled\n"
+		log.Println("├unhandled")
 	}
-	log.Printf(logMsg)
 
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(http.StatusAccepted)
 }
 
 func main() {
@@ -163,6 +202,8 @@ func main() {
 		names = append(names, repo.Name)
 	}
 	log.Println("registered repos:", strings.Join(names, ", "))
+
+	go jobRunner()
 
 	server := &http.Server{
 		Addr:           ":8283",
