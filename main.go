@@ -59,19 +59,31 @@ func jobRunner() {
 			tmpDir := "/tmp/spectacle-" + strings.Replace(job.Name, "/", "-", -1)
 			buildPath := tmpDir + "/src/github.com/" + job.Name
 			if _, err := os.Stat(tmpDir); os.IsExist(err) {
-				os.Remove(tmpDir)
+				os.RemoveAll(tmpDir)
 			}
 			os.Mkdir(tmpDir, os.ModePerm)
 			os.MkdirAll(buildPath, os.ModePerm)
 
 			// Fetch code
 			gitCmd := exec.Command("git", "clone", job.Url, buildPath)
-			/*gitCmd.Env = append(os.Environ(),
-				"GOPATH="+tmpDir,
-			)*/
 			if err := gitCmd.Run(); err != nil {
 				log.Printf("├failed to prepare for build, %s", err.Error())
 				return errors.Wrap(err, "git command failed")
+			}
+
+			// Find and run build/service script
+			if _, err := os.Stat(buildPath + "/spectacle.sh"); os.IsNotExist(err) {
+				log.Println("├no spectacle.sh, aborting")
+				return errors.Wrap(err, "missing spectacle.sh")
+			}
+			buildCmd := exec.Command("sh", "spectacle.sh")
+			buildCmd.Dir = buildPath
+			buildCmd.Env = append(os.Environ(),
+				"GOPATH="+tmpDir,
+			)
+			if err := buildCmd.Run(); err != nil {
+				log.Printf("├failed to complete, %s", err.Error())
+				return errors.Wrap(err, "error when running spectacle.sh")
 			}
 
 			return nil
