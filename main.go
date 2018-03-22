@@ -58,8 +58,11 @@ func jobRunner() {
 			// Set up working directory and prepare
 			tmpDir := "/tmp/spectacle-" + strings.Replace(job.Name, "/", "-", -1)
 			buildPath := tmpDir + "/src/github.com/" + job.Name
-			if _, err := os.Stat(tmpDir); os.IsExist(err) {
-				os.RemoveAll(tmpDir)
+			if info, _ := os.Stat(tmpDir); info != nil {
+				if err := os.RemoveAll(tmpDir); err != nil {
+					log.Printf("├could not remove temporary files, %s", err.Error())
+					return errors.Wrap(err, "remove failed")
+				}
 			}
 			os.Mkdir(tmpDir, os.ModePerm)
 			os.MkdirAll(buildPath, os.ModePerm)
