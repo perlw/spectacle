@@ -51,6 +51,7 @@ func jobRunner() {
 	for {
 		job := <-worker
 
+		start := time.Now()
 		log.Printf("┌running build job on %s|%s\n", job.Name, job.Branch)
 
 		err := (func() error {
@@ -80,7 +81,7 @@ func jobRunner() {
 		if err != nil {
 			status = "FAIL"
 		}
-		log.Printf("└[%s]\n", status)
+		log.Printf("└[%s] in %.2fms\n", status, float64(time.Since(start))/float64(time.Millisecond))
 	}
 }
 
