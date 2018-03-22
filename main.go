@@ -81,9 +81,9 @@ func jobRunner() {
 			}
 			buildCmd := exec.Command("sh", "spectacle.sh")
 			buildCmd.Dir = buildPath
-			buildCmd.Env = append(os.Environ(),
-				"GOPATH="+tmpDir,
-			)
+			buildCmd.Env = []string{
+				"GOPATH=" + tmpDir,
+			}
 			if err := buildCmd.Run(); err != nil {
 				log.Printf("├failed to complete, %s", err.Error())
 				return errors.Wrap(err, "error when running spectacle.sh")
