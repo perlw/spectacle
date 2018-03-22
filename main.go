@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/go-ini/ini"
@@ -76,12 +75,6 @@ func jobRunner() {
 
 			// Fetch code
 			gitCmd := exec.Command("git", "clone", job.Url, buildPath)
-			gitCmd.SysProcAttr = &syscall.SysProcAttr{
-				Credential: &syscall.Credential{
-					Uid: 1001,
-					Gid: 1001,
-				},
-			}
 			if err := gitCmd.Run(); err != nil {
 				log.Printf("├failed to prepare for build, %s", err.Error())
 				return errors.Wrap(err, "git command failed")
@@ -93,12 +86,6 @@ func jobRunner() {
 				return errors.Wrap(err, "missing spectacle.sh")
 			}
 			buildCmd := exec.Command("sh", "spectacle.sh")
-			buildCmd.SysProcAttr = &syscall.SysProcAttr{
-				Credential: &syscall.Credential{
-					Uid: 1001,
-					Gid: 1001,
-				},
-			}
 			buildCmd.Dir = buildPath
 			buildCmd.Env = []string{
 				"HOME=/home/spectacle",
