@@ -83,6 +83,7 @@ func jobRunner() {
 			buildCmd.Dir = buildPath
 			buildCmd.Env = []string{
 				"GOPATH=" + tmpDir,
+				"PATH=/usr/local/sbin:/usr/local/bin:/usr/bin",
 			}
 			if err := buildCmd.Run(); err != nil {
 				log.Printf("├failed to complete, %s", err.Error())
