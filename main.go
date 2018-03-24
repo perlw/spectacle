@@ -174,8 +174,10 @@ func (h HookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	event := r.Header.Get("X-GitHub-Event")
 	log.Printf("├incoming hook: %s|%s\n", repo.Name, event)
 	switch event {
+	case "ping":
+		log.Println("├ping")
 	case "watch":
-		log.Println("├to be implemented\n")
+		log.Println("├to be implemented")
 	case "push":
 		if !strings.HasSuffix(payload.Ref, repo.Branch) {
 			log.Printf("├ignored ref \"%s\"\n", payload.Ref)
